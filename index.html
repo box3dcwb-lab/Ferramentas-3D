@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Oficina 3D — ferramentas para impressão 3D</title>
+<meta name="description" content="Geradores paramétricos gratuitos para impressão 3D: caixa com tampa, vaso, suporte de celular, placa de nome, litofania e cortador de biscoito. Veja em 3D e baixe o STL.">
+<style>
+:root{--bg:#f4effb;--cd:#fff;--tx:#2b2540;--mu:#7a7390;--ac:#8e6bd8;--bd:#e2d9f1}
+@media(prefers-color-scheme:dark){:root{--bg:#1d1a28;--cd:#282438;--tx:#efeaf9;--mu:#a59fbb;--ac:#a98cf0;--bd:#3b3550}}
+*{box-sizing:border-box}
+body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--tx);display:grid;grid-template-columns:1fr 360px;height:100vh;overflow:hidden}
+#v{position:relative;min-width:0;min-height:0}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+#hint{position:absolute;left:10px;bottom:8px;font-size:12px;color:var(--mu);pointer-events:none}
+#p{overflow:auto;padding:14px;background:var(--cd);border-left:1px solid var(--bd)}
+h1{font-size:18px;margin:0 0 8px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mu);margin:16px 0 4px}
+button,select,input[type=text]{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:8px 12px}
+button,a.ch{margin:0 4px 6px 0}
+button.on,button.pr{background:var(--ac);border-color:var(--ac);color:#fff}
+a.ch{display:inline-block;font:inherit;color:var(--mu);border:1px dashed var(--bd);border-radius:10px;padding:8px 12px;text-decoration:none}
+select,input[type=text]{width:100%}
+.r{display:grid;grid-template-columns:1fr auto;gap:2px 8px;margin:8px 0}.r input[type=range]{grid-column:1/3;width:100%;accent-color:var(--ac)}
+.f{display:flex;flex-direction:column;gap:4px;margin:8px 0}.f span{font-size:13px}
+.k{display:flex;justify-content:space-between;align-items:center;margin:8px 0}.k input{width:56px;height:34px;padding:0;border:1px solid var(--bd);border-radius:8px;background:none}
+.n{font-size:12px;color:var(--mu);line-height:1.5}.n b{color:var(--tx)}
+#info{white-space:pre-line;margin:8px 0}
+.card{border:1px solid var(--bd);border-radius:12px;padding:12px;background:var(--bg);margin:6px 0}.card p{margin:0 0 8px;line-height:1.45}.card code{display:block;word-break:break-all;padding:8px;border-radius:8px;background:var(--cd);border:1px solid var(--bd);margin-bottom:8px;user-select:all}
+@media(max-width:760px){body{grid-template-columns:1fr;grid-template-rows:42vh 1fr}#p{border-left:0;border-top:1px solid var(--bd)}}
+</style></head><body>
+<div id="v"><canvas id="cv"></canvas><div id="hint">Arraste: girar · Pinça/scroll: zoom</div></div>
+<div id="p">
+ <h1>Oficina 3D</h1>
+ <div id="ts"></div>
+ <div id="ds" class="n"></div>
+ <div id="ps"></div>
+ <div id="info" class="n"></div>
+ <h2>Download STL</h2>
+ <select id="sel"></select>
+ <div style="height:6px"></div>
+ <button id="dl" class="pr">Baixar STL</button>
+ <div id="thx" class="n" hidden>Download iniciado! Se a ferramenta ajudou no seu projeto, veja abaixo como colaborar. 💜</div>
+ <h2>Colabore com o projeto</h2>
+ <div id="pix" class="card"><p>Estas ferramentas são gratuitas. Se foram úteis para você, fique à vontade para colaborar com o projeto via Pix, com o valor que achar justo. Obrigado!</p><code id="pk"></code><button id="cp" class="pr">Copiar chave Pix</button></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const PIX="box3d.cwb@gmail.com"; // ← chave Pix exibida na mensagem de colaboração
+const T=THREE,PI=Math.PI,
+ CH=.6,   // chanfro 45° na base (Z=0) em vez de filete (mm)
+ SEG=12;  // segmentos por canto arredondado
+const $=id=>document.getElementById(id);
+const eq=(p,q)=>Math.abs(p[0]-q[0])+Math.abs(p[1]-q[1])+Math.abs(p[2]-q[2])<1e-6;
+
+/* ---------- malha: triângulos em array plano [x,y,z, x,y,z, x,y,z, ...] ---------- */
+function Bd(){const t=[],a=(p,q,r)=>{if(!(eq(p,q)||eq(q,r)||eq(p,r)))t.push(p[0],p[1],p[2],q[0],q[1],q[2],r[0],r[1],r[2])};
+ return{t,a,
+ w(p,za,q,zb,f){const n=p.length;for(let i=0;i<n;i++){const j=(i+1)%n,A=[...p[i],za],B=[...p[j],za],C=[...q[j],zb],D=[...q[i],zb];if(f){a(A,C,B);a(A,D,C)}else{a(A,B,C);a(A,C,D)}}},
+ c(o,h,z,up){const V=p=>new T.Vector2(p[0],p[1]),all=o.concat(...h);
+  T.ShapeUtils.triangulateShape(o.map(V),h.map(x=>x.map(V))).forEach(([i,j,k])=>{
+   const p=all[i],q=all[j],r=all[k],ar=(q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]);
+   const P=[p[0],p[1],z],Q=[q[0],q[1],z],R=[r[0],r[1],z];(ar>0)==up?a(P,Q,R):a(P,R,Q)})}}}
+const pr=(b,poly,z0,z1)=>{b.c(poly,[],z0,false);b.w(poly,z0,poly,z1);b.c(poly,[],z1,true)}; // prisma fechado
+function arc(cx,cy,r,a0,a1){const p=[];for(let i=0;i<=SEG;i++){const a=a0+(a1-a0)*i/SEG;p.push([cx+r*Math.cos(a),cy+r*Math.sin(a)])}return p}
+function rr(w,h,r){r=Math.max(.4,Math.min(r,w/2-.2,h/2-.2));const x=w/2-r,y=h/2-r;return[...arc(x,-y,r,-PI/2,0),...arc(x,y,r,0,PI/2),...arc(-x,y,r,PI/2,PI),...arc(-x,-y,r,PI,1.5*PI)]}
+function inset(p,d){const n=p.length,e=(u,v)=>{const dx=v[0]-u[0],dy=v[1]-u[1],l=Math.hypot(dx,dy)||1;return[dy/l,-dx/l]};
+ return p.map((q,i)=>{const n1=e(p[(i+n-1)%n],q),n2=e(q,p[(i+1)%n]);let nx=n1[0]+n2[0],ny=n1[1]+n2[1];const l=Math.hypot(nx,ny)||1;nx/=l;ny/=l;
+  const k=d/Math.max(.5,nx*n1[0]+ny*n1[1]);return[q[0]-nx*k,q[1]-ny*k]})}
+const circ=(r,n,cx=0,cy=0)=>Array.from({length:n},(_,k)=>[cx+r*Math.cos(2*PI*k/n),cy+r*Math.sin(2*PI*k/n)]);
+const ccw=p=>{let s=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];s+=a[0]*b[1]-b[0]*a[1]}return s>0?p:p.slice().reverse()};
+
+/* ---------- 1) CAIXA COM TAMPA (organizador) ---------- */
+function caixa(p){const X=p.x,Y=p.y,Z=p.z,w=p.w,r=Math.max(p.r,1),tol=p.tol,lipH=4,lt=w+.4;
+ const O=rr(X,Y,r),cav=rr(X-2*w,Y-2*w,Math.max(r-w,.4)),O0=inset(O,CH);let b=Bd();
+ b.c(O0,[],0,false);b.w(O0,0,O,CH);b.w(O,CH,O,Z);b.c(O,[cav],Z,true);b.w(cav,w,cav,Z,true);b.c(cav,[],w,true);
+ /* divisórias: prismas que entram 0,4 mm nas paredes e no fundo (o fatiador une os volumes) */
+ const iw=X-2*w,ih=Y-2*w,dh=Z-lipH-.4,rect=(x0,y0,x1,y1)=>[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];
+ for(let i=1;i<p.nx;i++){const x=-iw/2+i*iw/p.nx;pr(b,rect(x-w/2,-ih/2-.4,x+w/2,ih/2+.4),w-.4,dh)}
+ for(let j=1;j<p.ny;j++){const y=-ih/2+j*ih/p.ny;pr(b,rect(-iw/2-.4,y-w/2,iw/2+.4,y+w/2),w-.4,dh)}
+ const body=b.t;b=Bd();
+ /* tampa: impressa de cabeça para baixo (face externa na mesa); aba interna com folga */
+ const lo=rr(X-2*w-2*tol,Y-2*w-2*tol,Math.max(r-w-tol,.4)),li=rr(X-4*w-2*tol,Y-4*w-2*tol,Math.max(r-2*w-tol,.4));
+ b.c(O0,[],0,false);b.w(O0,0,O,CH);b.w(O,CH,O,lt);b.c(O,[lo],lt,true);b.w(lo,lt,lo,lt+lipH);b.c(lo,[li],lt+lipH,true);b.w(li,lt,li,lt+lipH,true);b.c(li,[],lt,true);
+ return{p:[{n:'Caixa',t:body,c:p.c1},{n:'Tampa',t:b.t,c:p.c2}],
+  i:`Medidas externas: ${X} × ${Y} × ${Z} mm · ${p.nx*p.ny} compartimento(s)\nImpressão sem suporte: caixa com o fundo na mesa; tampa virada (face lisa na mesa). Camada 0,2 mm · 3 paredes · infill 15%.`}}
+
+/* ---------- 2) VASO / CACHEPÔ ---------- */
+function vase(R,Ri,H,fl,n,tw,hd){const Nz=Math.max(8,Math.min(60,Math.round(H/3))),ang=(k,z)=>2*PI*k/n+tw*PI/180*z/H;
+ const ring=(r,z)=>Array.from({length:n},(_,k)=>{const a=ang(k,z);return[r*Math.cos(a),r*Math.sin(a)]});
+ const zs=Array.from({length:Nz+1},(_,i)=>CH+(H-CH)*i/Nz),zi=[fl,...zs.filter(z=>z>fl+.01)];
+ const oR=zs.map(z=>ring(R(z),z)),o0=ring(R(CH)-CH,0),iR=zi.map(z=>ring(Ri(z),z));
+ const hr=Math.min(hd/2,Ri(fl)*Math.cos(PI/n)-2),hole=hr>1?circ(hr,24):null,b=Bd();
+ b.c(o0,hole?[hole]:[],0,false);b.w(o0,0,oR[0],CH);for(let i=0;i<Nz;i++)b.w(oR[i],zs[i],oR[i+1],zs[i+1]);
+ b.c(oR[Nz],[iR[iR.length-1]],H,true);for(let k=iR.length-1;k>0;k--)b.w(iR[k-1],zi[k-1],iR[k],zi[k],true);
+ b.c(iR[0],hole?[hole]:[],fl,true);if(hole)b.w(hole,0,hole,fl,true);return b.t}
+function vaso(p){const H=p.h,rb=p.db/2,rt=p.dt/2,w=p.w,n=p.n,cs=Math.cos(PI/n);
+ const R=z=>{const u=z/H;return rb+(rt-rb)*u+p.bj*Math.sin(PI*u)},Ri=z=>R(z)-w/cs;
+ let mx=0;for(let z=0;z<H;z+=H/60)mx=Math.max(mx,(R(z+H/60)-R(z))/(H/60));
+ const ang=Math.atan(mx)*180/PI,out=[{n:'Vaso',t:vase(R,Ri,H,p.fl,n,p.tw,p.dr),c:p.c1}];
+ if(p.pires){const rs=rb+5,hs=14;out.push({n:'Pires',t:vase(z=>rs+4*z/hs,z=>rs+4*z/hs-1.6,hs,2,64,0,0),c:p.c2})}
+ return{p:out,i:`Altura ${H} mm · Ø máx. ≈ ${(2*Math.max(rb,rt,(rb+rt)/2+p.bj)).toFixed(0)} mm\n`+(ang>45?`⚠ Inclinação externa de ${ang.toFixed(0)}° (acima de 45°): reduza o bojo/diferença de diâmetros ou use suporte.`:`Inclinação máx. ${ang.toFixed(0)}° (sem suporte). Imprima com o fundo na mesa · camada 0,2 mm.`)}}
+
+/* ---------- 3) SUPORTE DE CELULAR / TABLET ---------- */
+function suporte(p){const t=p.t,al=(90-p.ang)*PI/180,sa=Math.sin(al),ca=Math.cos(al),slot=p.dev+2,yf=t+slot,Hs=p.hs,Wd=p.w;
+ const F=[yf+Hs*sa,t+Hs*ca],tb=t/ca,yb=yf+t*(1-sa)/ca;
+ const poly=[[0,0],[yb,0],[F[0]+tb,F[1]],[F[0],F[1]],[yf,t],[t,t],[t,p.lip],[0,p.lip]];
+ const b=Bd();pr(b,poly,0,Wd);const m=b.t;for(let i=0;i<m.length;i+=3){const u=m[i],v=m[i+1],w=m[i+2];m[i]=w-Wd/2;m[i+1]=u;m[i+2]=v} // (u,v,w)->(x,y,z)
+ return{p:[{n:'Suporte',t:m,c:p.c1}],i:`Ângulo do apoio ${p.ang}° · vão para o aparelho ${slot} mm · largura ${Wd} mm\nImpressão sem suporte: base na mesa. Camada 0,2 mm · 4 paredes · infill 20%. Cole tiras de borracha na base e no apoio.`}}
+
+/* ---------- 4) PLACA DE NOME / CHAVEIRO ---------- */
+const FONTS={'Sem serifa':'Arial, Helvetica, sans-serif','Serifa':'Georgia, "Times New Roman", serif','Monoespaçada':'"Courier New", monospace','Cursiva':'"Brush Script MT","Comic Sans MS",cursive'};
+function textMask(lines,font,aw,ah,ppm){const L=lines.filter(s=>s.trim().length);if(!L.length)return null;
+ const cw=Math.round(aw*ppm),ch=Math.round(ah*ppm),cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const x=cv.getContext('2d',{willReadFrequently:true});
+ x.fillStyle='#000';x.textAlign='center';x.textBaseline='middle';let fs=ch/L.length*.9;
+ for(;fs>6;fs-=2){x.font=`bold ${fs}px ${font}`;if(L.every(s=>x.measureText(s).width<=cw*.96))break}
+ x.font=`bold ${fs}px ${font}`;L.forEach((s,i)=>x.fillText(s,cw/2,ch*(i+.5)/L.length));
+ const d=x.getImageData(0,0,cw,ch).data,m=new Uint8Array(cw*ch);for(let i=0;i<m.length;i++)m[i]=d[4*i+3]>110?1:0;
+ for(let j=0;j<ch-1;j++)for(let i=0;i<cw-1;i++){const a=m[j*cw+i],b=m[j*cw+i+1],c=m[(j+1)*cw+i],e=m[(j+1)*cw+i+1];if(a&&e&&!b&&!c)m[j*cw+i+1]=1;else if(b&&c&&!a&&!e)m[j*cw+i]=1} // sem contato só na diagonal
+ return{m,cw,ch}}
+function voxel(m,cw,ch,ppm,x0,y1,zb,zt){const b=Bd(),X=i=>x0+i/ppm,Y=j=>y1-j/ppm,on=(i,j)=>i>=0&&j>=0&&i<cw&&j<ch&&m[j*cw+i];
+ for(let j=0;j<ch;j++)for(let i=0;i<cw;i++){if(!m[j*cw+i])continue;const xa=X(i),xb=X(i+1),ya=Y(j+1),yb=Y(j);
+  b.a([xa,ya,zt],[xb,ya,zt],[xb,yb,zt]);b.a([xa,ya,zt],[xb,yb,zt],[xa,yb,zt]);
+  b.a([xa,ya,zb],[xb,yb,zb],[xb,ya,zb]);b.a([xa,ya,zb],[xa,yb,zb],[xb,yb,zb]);
+  if(!on(i-1,j)){b.a([xa,yb,zb],[xa,ya,zb],[xa,ya,zt]);b.a([xa,yb,zb],[xa,ya,zt],[xa,yb,zt])}
+  if(!on(i+1,j)){b.a([xb,ya,zb],[xb,yb,zb],[xb,yb,zt]);b.a([xb,ya,zb],[xb,yb,zt],[xb,ya,zt])}
+  if(!on(i,j+1)){b.a([xa,ya,zb],[xb,ya,zb],[xb,ya,zt]);b.a([xa,ya,zb],[xb,ya,zt],[xa,ya,zt])}
+  if(!on(i,j-1)){b.a([xb,yb,zb],[xa,yb,zb],[xa,yb,zt]);b.a([xb,yb,zb],[xa,yb,zt],[xb,yb,zt])}}
+ return b.t}
+function placa(p){const W=p.w,H=p.h,bt=p.bt,rl=p.rl,hd=p.hd,O=rr(W,H,Math.max(p.r,1)),O0=inset(O,CH),b=Bd();
+ const hole=p.furo&&H/2>hd/2+1.6?circ(hd/2,32,-W/2+hd/2+4,0):null;
+ b.c(O0,hole?[hole]:[],0,false);b.w(O0,0,O,CH);b.w(O,CH,O,bt);b.c(O,hole?[hole]:[],bt,true);if(hole)b.w(hole,0,hole,bt,true);
+ const out=[{n:'Placa',t:b.t,c:p.c1}],ax0=hole?-W/2+hd+8:-W/2+4,aw=W/2-4-ax0,ah=H-6,ppm=4,mk=aw>6?textMask([p.l1,p.l2],FONTS[p.f],aw,ah,ppm):null;
+ if(mk)out.push({n:'Texto',t:voxel(mk.m,mk.cw,mk.ch,ppm,ax0,ah/2,bt-.4,bt+rl),c:p.c2,ov:true});
+ return{p:out,i:`Placa ${W} × ${H} × ${bt} mm + relevo de ${rl} mm\nImpressão: face lisa na mesa. Para duas cores, troque o filamento na camada ${(bt/.2).toFixed(0)} (camada 0,2 mm) ou baixe "Placa" e "Texto" separados (mesma origem).`}}
+
+/* ---------- 5) LITOFANIA (foto → STL) ---------- */
+let IMG=null;
+function litofania(p){const Wd=p.w,asp=IMG?IMG.naturalHeight/IMG.naturalWidth:.75,Hd=Wd*asp,res=Math.max(p.res,Math.sqrt(Wd*Hd/150000));
+ const nx=Math.max(8,Math.round(Wd/res)),ny=Math.max(8,Math.round(Hd/res)),cx=Wd/nx,cy=Hd/ny,N=nx+1;
+ const cv=document.createElement('canvas');cv.width=N;cv.height=ny+1;const x=cv.getContext('2d',{willReadFrequently:true});
+ if(IMG)x.drawImage(IMG,0,0,N,ny+1);else{const g=x.createRadialGradient(N/2,ny/2,2,N/2,ny/2,N/2);g.addColorStop(0,'#fff');g.addColorStop(1,'#222');x.fillStyle=g;x.fillRect(0,0,N,ny+1)}
+ const d=x.getImageData(0,0,N,ny+1).data,Z=new Float32Array(N*(ny+1));
+ for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){const o=4*(j*N+(p.mir?nx-i:i)),l=(.299*d[o]+.587*d[o+1]+.114*d[o+2])/255;let v=Math.pow(l,p.ct);if(p.inv)v=1-v;
+  let h=p.tmin+(p.tmax-p.tmin)*(1-v);if(Math.min(i*cx,Wd-i*cx,j*cy,Hd-j*cy)<p.fr)h=p.tmax;Z[j*N+i]=h}
+ const X=i=>i*cx-Wd/2,Y=j=>Hd/2-j*cy,per=[];
+ for(let j=0;j<ny;j++)per.push([0,j]);for(let i=0;i<nx;i++)per.push([i,ny]);for(let j=ny;j>0;j--)per.push([nx,j]);for(let i=nx;i>0;i--)per.push([i,0]);
+ const n=2*nx*ny+3*per.length,t=new Float32Array(n*9);let o=0;
+ const tri=(a,b,c)=>{t[o++]=a[0];t[o++]=a[1];t[o++]=a[2];t[o++]=b[0];t[o++]=b[1];t[o++]=b[2];t[o++]=c[0];t[o++]=c[1];t[o++]=c[2]},V=(i,j)=>[X(i),Y(j),Z[j*N+i]],B=(i,j)=>[X(i),Y(j),0];
+ for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){tri(V(i,j),V(i,j+1),V(i+1,j+1));tri(V(i,j),V(i+1,j+1),V(i+1,j))}
+ per.forEach((q,k)=>{const s=per[(k+1)%per.length];tri([0,0,0],B(s[0],s[1]),B(q[0],q[1]));tri(B(q[0],q[1]),B(s[0],s[1]),V(s[0],s[1]));tri(B(q[0],q[1]),V(s[0],s[1]),V(q[0],q[1]))});
+ return{p:[{n:'Litofania',t,c:'#f3efe6'}],i:`${Wd} × ${Hd.toFixed(0)} mm · espessura ${p.tmin}–${p.tmax} mm · detalhe ${res.toFixed(2)} mm\n${IMG?'':'Escolha uma foto acima (usando imagem de exemplo).\n'}Impressão: face lisa na mesa, filamento BRANCO, infill 100%, camada 0,1–0,12 mm. Ilumine por trás. Fotos com bom contraste funcionam melhor.`}}
+
+/* ---------- 6) CORTADOR DE BISCOITO ---------- */
+const pol=(n,f)=>Array.from({length:n},(_,k)=>f(2*PI*k/n));
+const chai=(p,it)=>{for(;it>0;it--)p=p.flatMap((a,i)=>{const b=p[(i+1)%p.length];return[[.75*a[0]+.25*b[0],.75*a[1]+.25*b[1]],[.25*a[0]+.75*b[0],.25*a[1]+.75*b[1]]]});return p};
+const SHAPES={'Círculo':()=>pol(96,t=>[Math.cos(t),Math.sin(t)]),
+ 'Coração':()=>{const q=Math.SQRT1_2,ar=(cx,cy,a0,a1)=>Array.from({length:21},(_,i)=>{const a=a0+(a1-a0)*i/20;return[cx+q*Math.cos(a),cy+q*Math.sin(a)]});
+  return chai([[0,0],...ar(.5,1.5,-PI/4,3*PI/4),...ar(-.5,1.5,PI/4,5*PI/4).slice(1)],2)}, // quadrado girado 45° + 2 semicírculos (ponta de 90°, sem cúspide)
+ 'Estrela':(n)=>chai(Array.from({length:2*n},(_,k)=>{const a=PI/2+PI*k/n,r=k%2?.45:1;return[r*Math.cos(a),r*Math.sin(a)]}),2),
+ 'Flor':(n)=>pol(160,t=>{const r=1+.28*Math.cos(n*t);return[r*Math.cos(t),r*Math.sin(t)]}),
+ 'Hexágono':()=>chai(pol(6,t=>[Math.cos(t),Math.sin(t)]),2),
+ 'Quadrado arredondado':()=>rr(2,2,.5)};
+function cortador(p){let s=SHAPES[p.f](p.np);const xs=s.map(q=>q[0]),ys=s.map(q=>q[1]),x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys),k=p.s/Math.max(x1-x0,y1-y0);
+ s=ccw(s.map(q=>[(q[0]-(x0+x1)/2)*k,(q[1]-(y0+y1)/2)*k]));
+ const H=p.h,fh=p.fh,O=s,sc=1+p.fw/(p.s/2),F=O.map(q=>[q[0]*sc,q[1]*sc]),F0=inset(F,CH),I0=inset(O,p.w),I1=inset(O,p.edge),b=Bd();
+ const dobra=(r)=>r.some((q,i)=>{const j=(i+1)%r.length;return(r[j][0]-q[0])*(O[j][0]-O[i][0])+(r[j][1]-q[1])*(O[j][1]-O[i][1])<=0}); // parede maior que o raio da curva
+ if(dobra(I0)||dobra(I1))throw new Error('os detalhes da forma são mais finos que a parede. Aumente o tamanho ou reduza as pontas/pétalas.');
+ b.c(F0,[I0],0,false);b.w(F0,0,F,CH);b.w(F,CH,F,fh);b.c(F,[O],fh,true);b.w(O,fh,O,H);b.c(O,[I1],H,true);b.w(I0,0,I1,H,true);
+ return{p:[{n:'Cortador',t:b.t,c:p.c1}],i:`${p.f} · ${p.s} mm · lâmina ${H} mm com fio de corte de ${p.edge} mm\nImpressão: aba na mesa, lâmina para cima (sem suporte). Camada 0,12–0,2 mm. Use PLA/PETG e lave à mão; para contato com alimento, prefira filamento e processo próprios para uso alimentar.`}}
+
+/* ---------- catálogo de ferramentas ---------- */
+const R=(k,l,min,max,step,v)=>({k,l,t:'r',min,max,step,v}),S=(k,l,opts,v)=>({k,l,t:'s',opts,v}),C=(k,l,v)=>({k,l,t:'c',v}),TX=(k,l,v)=>({k,l,t:'t',v}),K=(k,l,v)=>({k,l,t:'k',v}),F_=(k,l)=>({k,l,t:'f'});
+const TOOLS=[
+ {id:'caixa',n:'Caixa com tampa',d:'Organizador com divisórias e tampa de encaixe.',build:caixa,P:[R('x','Comprimento (mm)',40,250,1,100),R('y','Largura (mm)',40,200,1,70),R('z','Altura da caixa (mm)',20,150,1,40),R('w','Parede (mm)',1.2,2.4,.4,1.6),R('r','Arredondamento dos cantos (mm)',0,30,1,8),R('nx','Divisórias — colunas',1,6,1,1),R('ny','Divisórias — linhas',1,6,1,1),R('tol','Folga da tampa (mm)',.2,.5,.05,.3),K('c1','Cor da caixa','#8e6bd8'),K('c2','Cor da tampa','#f6e8a0')]},
+ {id:'vaso',n:'Vaso / cachepô',d:'Vaso facetado ou liso, com torção, dreno e pires.',build:vaso,P:[R('db','Ø da base (mm)',30,200,1,70),R('dt','Ø do topo (mm)',30,250,1,90),R('h','Altura (mm)',30,300,1,100),R('bj','Bojo (mm)',-15,25,1,0),R('w','Parede (mm)',1.2,3.2,.4,1.6),R('fl','Fundo (mm)',1.6,4,.4,2),R('n','Lados (64 = redondo)',3,64,1,8),R('tw','Torção (graus)',-180,180,5,45),R('dr','Furo de dreno Ø (mm, 0 = sem)',0,20,1,8),C('pires','Incluir pires',true),K('c1','Cor do vaso','#ff8a1f'),K('c2','Cor do pires','#c8e61c')]},
+ {id:'suporte',n:'Suporte de celular',d:'Apoio inclinado para celular ou tablet.',build:suporte,P:[R('w','Largura (mm)',40,200,1,80),R('ang','Ângulo do apoio (°)',45,80,1,65),R('t','Espessura (mm)',3.2,6,.4,4),R('hs','Altura do apoio (mm)',50,150,1,80),R('dev','Espessura do aparelho (mm)',6,20,1,10),R('lip','Altura do lábio frontal (mm)',10,40,1,18),K('c1','Cor','#a98ee0')]},
+ {id:'placa',n:'Placa / chaveiro',d:'Nome em relevo, com furo opcional para argola.',build:placa,P:[TX('l1','Texto (linha 1)','MARIA'),TX('l2','Texto (linha 2, opcional)',''),S('f','Fonte',Object.keys(FONTS),'Sem serifa'),R('w','Largura (mm)',30,200,1,70),R('h','Altura (mm)',15,100,1,25),R('bt','Espessura da base (mm)',1.2,4,.4,2),R('rl','Altura do relevo (mm)',.8,4,.4,1.2),R('r','Arredondamento (mm)',0,20,1,6),C('furo','Furo para chaveiro',true),R('hd','Ø do furo (mm)',3,8,.5,4.5),K('c1','Cor da placa','#2b2540'),K('c2','Cor do texto','#ff4fa0')]},
+ {id:'litofania',n:'Litofania',d:'Transforme uma foto em placa translúcida (acende por trás).',build:litofania,P:[F_('foto','Foto (JPG/PNG)'),R('w','Largura (mm)',40,250,1,100),R('tmin','Espessura mínima (mm)',.6,1.2,.2,.8),R('tmax','Espessura máxima (mm)',2,4,.2,3.2),R('fr','Moldura (mm)',0,10,1,3),R('res','Detalhe (mm/pixel)',.3,.8,.1,.5),R('ct','Contraste',.5,2,.1,1),C('inv','Inverter claro/escuro',false),C('mir','Espelhar (esquerda/direita)',false)]},
+ {id:'cortador',n:'Cortador de biscoito',d:'Cortador com lâmina fina e aba para apertar.',build:cortador,P:[S('f','Forma',Object.keys(SHAPES),'Coração'),R('s','Tamanho (mm)',30,150,1,70),R('np','Pontas / pétalas',4,12,1,5),R('h','Altura da lâmina (mm)',10,30,1,15),R('w','Parede na base (mm)',1.2,2.4,.4,1.6),R('edge','Fio de corte (mm)',.4,1.2,.4,.8),R('fw','Largura da aba (mm)',4,12,1,6),R('fh','Espessura da aba (mm)',1.6,3.2,.4,2),K('c1','Cor','#ff4fa0')]}
+];
+/* ---------- app ---------- */
+let cur=0,parts=[],SZ={w:100,h:60,z:30};const V={};TOOLS.forEach(t=>{V[t.id]={};t.P.forEach(q=>{if(q.t!='f')V[t.id][q.k]=q.v})});
+function geo(t){const n=t.length/9,g=new T.BufferGeometry(),pos=t instanceof Float32Array?t:new Float32Array(t);g.setAttribute('position',new T.BufferAttribute(pos,3));
+ if(n>40000){g.computeVertexNormals();return g}
+ const nor=new Float32Array(pos.length),fn=new Float32Array(n*3),mp=new Map(),K=o=>Math.round(pos[o]*50)+','+Math.round(pos[o+1]*50)+','+Math.round(pos[o+2]*50);
+ for(let i=0;i<n;i++){const o=9*i,ux=pos[o+3]-pos[o],uy=pos[o+4]-pos[o+1],uz=pos[o+5]-pos[o+2],vx=pos[o+6]-pos[o],vy=pos[o+7]-pos[o+1],vz=pos[o+8]-pos[o+2];
+  const x=uy*vz-uz*vy,y=uz*vx-ux*vz,z=ux*vy-uy*vx,l=Math.hypot(x,y,z)||1;fn[3*i]=x/l;fn[3*i+1]=y/l;fn[3*i+2]=z/l;
+  for(let k=0;k<3;k++){const q=K(o+3*k);let L=mp.get(q);if(!L)mp.set(q,L=[]);L.push(i)}}
+ for(let i=0;i<n;i++)for(let k=0;k<3;k++){let sx=0,sy=0,sz=0;for(const f of mp.get(K(9*i+3*k))){if(fn[3*f]*fn[3*i]+fn[3*f+1]*fn[3*i+1]+fn[3*f+2]*fn[3*i+2]>.8){sx+=fn[3*f];sy+=fn[3*f+1];sz+=fn[3*f+2]}}
+  const l=Math.hypot(sx,sy,sz)||1,o=9*i+3*k;nor[o]=sx/l;nor[o+1]=sy/l;nor[o+2]=sz/l}
+ g.setAttribute('normal',new T.BufferAttribute(nor,3));return g}
+const cv=$('cv'),rd=new T.WebGLRenderer({canvas:cv,antialias:true,alpha:true}),sc=new T.Scene(),cam=new T.PerspectiveCamera(40,1,1,4000),grp=new T.Group(),tgt=new T.Vector3();
+grp.rotation.x=-PI/2;const dlight=new T.DirectionalLight(0xffffff,.9);dlight.position.set(150,300,250);
+const grid=new T.GridHelper(400,40,0x8a85a8,0xb9b4cf);grid.material.transparent=true;grid.material.opacity=.35;
+sc.add(grp,grid,new T.HemisphereLight(0xffffff,0x8a85a8,.85),dlight);
+function rs(){const e=cv.parentElement,w=e.clientWidth,h=e.clientHeight;if(!w||!h)return;rd.setPixelRatio(Math.min(devicePixelRatio,2));rd.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+new ResizeObserver(rs).observe(cv.parentElement);
+let th=.6,ph=1.1,dist=300;const ptrs=new Map();let pd=0;
+cv.onpointerdown=e=>{cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY])};
+cv.onpointermove=e=>{const o=ptrs.get(e.pointerId);if(!o)return;
+ if(ptrs.size==1){th-=(e.clientX-o[0])*.01;ph=Math.min(3,Math.max(.15,ph-(e.clientY-o[1])*.01))}
+ ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+ if(ptrs.size==2){const[a,b]=[...ptrs.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pd)dist=Math.min(2500,Math.max(40,dist*pd/d));pd=d}};
+cv.onpointerup=cv.onpointercancel=e=>{ptrs.delete(e.pointerId);pd=0};
+cv.onwheel=e=>{e.preventDefault();dist=Math.min(2500,Math.max(40,dist*(1+Math.sign(e.deltaY)*.08)))};
+(function f(){cam.position.set(tgt.x+dist*Math.sin(ph)*Math.sin(th),tgt.y+dist*Math.cos(ph),tgt.z+dist*Math.sin(ph)*Math.cos(th));cam.lookAt(tgt);rd.render(sc,cam);requestAnimationFrame(f)})();
+
+function bb(t){let a=1e9,b=-1e9,c=1e9,d=-1e9,z=-1e9;for(let i=0;i<t.length;i+=3){const x=t[i],y=t[i+1];if(x<a)a=x;if(x>b)b=x;if(y<c)c=y;if(y>d)d=y;if(t[i+2]>z)z=t[i+2]}return{a,b,c,d,z}}
+function layout(){let cx=0,mz=0,my=0;parts.forEach((p,k)=>{const q=bb(p.t);mz=Math.max(mz,q.z);my=Math.max(my,q.d-q.c);
+ if(p.ov&&k){p.dx=parts[k-1].dx;p.dy=parts[k-1].dy;return}p.dx=cx-q.a;p.dy=-(q.c+q.d)/2;cx+=q.b-q.a+10});
+ const tw=cx-10;parts.forEach(p=>p.dx-=tw/2);SZ={w:tw,h:my,z:mz}}
+function show(fit){grp.children.slice().forEach(o=>{o.geometry.dispose();grp.remove(o)});
+ parts.forEach(p=>{const o=new T.Mesh(geo(p.t),new T.MeshStandardMaterial({color:p.c,roughness:.55}));o.position.set(p.dx,p.dy,0);grp.add(o)});
+ if(fit){tgt.set(0,SZ.z/3,0);dist=Math.max(SZ.w,SZ.h,SZ.z)*2.2+60}
+ const s=$('sel');s.innerHTML='';[['all','Todas as peças — mesa de impressão'],...parts.map(p=>[p.n,'Somente '+p.n])].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;s.append(o)})}
+let tm;function sch(){clearTimeout(tm);tm=setTimeout(()=>run(false),120)}
+function run(fit){const t=TOOLS[cur];let r;try{r=t.build(V[t.id])}catch(e){$('info').textContent='Não foi possível gerar com esses valores: '+e.message;console.error(e);return}
+ parts=r.p;layout();const keep=$('sel').value;show(fit);if([...$('sel').options].some(o=>o.value==keep))$('sel').value=keep;$('info').textContent=r.i||''}
+
+function ctl(){const t=TOOLS[cur],v=V[t.id],el=$('ps');el.innerHTML='';$('ds').textContent=t.d;
+ t.P.forEach(q=>{const d=document.createElement('label');
+  if(q.t=='r'){d.className='r';d.innerHTML=`<span>${q.l}</span><output>${v[q.k]}</output><input type="range" min="${q.min}" max="${q.max}" step="${q.step}">`;const i=d.querySelector('input'),o=d.querySelector('output');i.value=v[q.k];i.oninput=()=>{v[q.k]=+i.value;o.textContent=i.value;sch()}}
+  else if(q.t=='t'){d.className='f';d.innerHTML=`<span>${q.l}</span><input type="text" maxlength="24">`;const i=d.querySelector('input');i.value=v[q.k];i.oninput=()=>{v[q.k]=i.value;sch()}}
+  else if(q.t=='s'){d.className='f';d.innerHTML=`<span>${q.l}</span><select>${q.opts.map(o=>`<option>${o}</option>`).join('')}</select>`;const i=d.querySelector('select');i.value=v[q.k];i.onchange=()=>{v[q.k]=i.value;sch()}}
+  else if(q.t=='c'){d.className='k';d.innerHTML=`<span>${q.l}</span><input type="checkbox">`;const i=d.querySelector('input');i.checked=v[q.k];i.onchange=()=>{v[q.k]=i.checked;sch()}}
+  else if(q.t=='k'){d.className='k';d.innerHTML=`<span>${q.l}</span><input type="color">`;const i=d.querySelector('input');i.value=v[q.k];i.oninput=()=>{v[q.k]=i.value;sch()}}
+  else{d.className='f';d.innerHTML=`<span>${q.l}</span><input type="file" accept="image/*">`;d.querySelector('input').onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();im.onload=()=>{IMG=im;run(true)};im.src=URL.createObjectURL(f)}}
+  el.append(d)})}
+function tabs(){const ts=$('ts');ts.innerHTML='';TOOLS.forEach((t,i)=>{const b=document.createElement('button');b.textContent=t.n;if(i==cur)b.className='on';b.onclick=()=>{cur=i;tabs();ctl();run(true)};ts.append(b)});
+ const a=document.createElement('a');a.className='ch';a.href='index.html';a.textContent='Gavetas modulares ↗';ts.append(a)}
+
+/* ---------- exportação STL binário ---------- */
+function stl(list){let n=0;list.forEach(p=>n+=p.t.length/9);const b=new DataView(new ArrayBuffer(84+50*n));b.setUint32(80,n,true);let o=84;
+ list.forEach(({t,dx,dy})=>{for(let i=0;i<t.length;i+=9){const a=[t[i]+dx,t[i+1]+dy,t[i+2]],c=[t[i+3]+dx,t[i+4]+dy,t[i+5]],d=[t[i+6]+dx,t[i+7]+dy,t[i+8]];
+  const u=[c[0]-a[0],c[1]-a[1],c[2]-a[2]],w=[d[0]-a[0],d[1]-a[1],d[2]-a[2]],x=u[1]*w[2]-u[2]*w[1],y=u[2]*w[0]-u[0]*w[2],z=u[0]*w[1]-u[1]*w[0],l=Math.hypot(x,y,z)||1;
+  [x/l,y/l,z/l,...a,...c,...d].forEach((q,k)=>b.setFloat32(o+4*k,q,true));o+=50}});return new Blob([b],{type:'model/stl'})}
+$('dl').onclick=()=>{const k=$('sel').value,t=TOOLS[cur];if(!parts.length)return;
+ const list=k=='all'?parts.map(p=>({t:p.t,dx:p.dx,dy:p.dy})):parts.filter(p=>p.n==k).map(p=>({t:p.t,dx:0,dy:0}));
+ const a=document.createElement('a');a.href=URL.createObjectURL(stl(list));a.download=t.id+(k=='all'?'':'_'+k.toLowerCase())+'.stl';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),9000);
+ if(!PIX.startsWith('COLE')){$('thx').hidden=false;$('pix').scrollIntoView({behavior:'smooth',block:'nearest'})}};
+if(PIX.startsWith('COLE')){$('pix').style.display='none';document.querySelectorAll('h2').forEach(h=>{if(h.textContent.startsWith('Colabore'))h.style.display='none'})}else $('pk').textContent=PIX;
+$('cp').onclick=async()=>{try{await navigator.clipboard.writeText(PIX);$('cp').textContent='Chave copiada! ✓'}catch(e){const r=document.createRange();r.selectNodeContents($('pk'));const g=getSelection();g.removeAllRanges();g.addRange(r);$('cp').textContent='Chave selecionada: copie manualmente'}};
+tabs();ctl();run(true);rs();
+</script></body></html>
